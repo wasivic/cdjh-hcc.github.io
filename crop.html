@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>專業圖片裁切與 JPG 轉換工具</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: #f3f4f6;
+        }
+
+        /* Custom scrollbar for better aesthetics */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #c1c1c1; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8; 
+        }
+
+        /* Ensure cropper container scales nicely */
+        .img-container {
+            width: 100%;
+            height: 50vh;
+            max-height: 600px;
+            background-color: #e5e7eb;
+            border-radius: 0.5rem;
+            overflow: hidden;
+        }
+        
+        @media (min-width: 768px) {
+            .img-container {
+                height: 60vh;
+            }
+        }
+
+        /* Hide number input spinners */
+        input[type="number"]::-webkit-inner-spin-button,
+        input[type="number"]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        input[type="number"] {
+            -moz-appearance: textfield;
+        }
+
+        .range-slider {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 6px;
+            background: #d1d5db;
+            border-radius: 5px;
+            outline: none;
+        }
+        .range-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #3b82f6;
+            cursor: pointer;
+            transition: background .15s ease-in-out;
+        }
+        .range-slider::-webkit-slider-thumb:hover {
+            background: #2563eb;
+        }
+    </style>
+</head>
+<body class="text-gray-800 antialiased min-h-screen flex flex-col">
+
+    <header class="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-10">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <i class="ph-fill ph-crop text-blue-600 text-2xl"></i>
+                <h1 class="font-bold text-xl tracking-tight text-gray-900">ImageStudio</h1>
+            </div>
+            <div class="text-sm text-gray-500 font-medium">
+                匯入 · 裁切 · 轉換圖片
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-grow w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex flex-col gap-6">
+        
+        <!-- Upload Zone (Visible initially) -->
+        <div id="uploadZone" class="w-full h-96 border-2 border-dashed border-gray-300 rounded-2xl bg-white flex flex-col items-center justify-center transition-all hover:border-blue-400 hover:bg-blue-50 cursor-pointer group">
+            <input type="file" id="fileInput" class="hidden" accept="image/*">
+            <div class="bg-blue-100 p-4 rounded-full mb-4 group-hover:scale-110 transition-transform">
+                <i class="ph ph-upload-simple text-4xl text-blue-600"></i>
+            </div>
+            <h2 class="text-xl font-semibold text-gray-700 mb-2">點擊或拖曳圖片至此</h2>
+            <p class="text-gray-500 text-sm mb-6">支援 PNG, JPG, WebP, GIF 等多數圖片格式</p>
+            <button class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-6 rounded-lg shadow-sm transition-colors" onclick="document.getElementById('fileInput').click()">
+                選擇圖片
+            </button>
+        </div>
+
+        <!-- Workspace (Hidden initially) -->
+        <div id="workspace" class="hidden w-full flex flex-col lg:flex-row gap-8">
+            
+            <!-- Left Column: Cropper Editor -->
+            <div class="w-full lg:w-2/3 flex flex-col gap-4">
+                <div class="bg-white p-4 rounded-2xl shadow-sm border border-gray-200">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="font-semibold text-gray-800 flex items-center gap-2">
+                            <i class="ph ph-scissors text-lg"></i> 裁切區域
+                        </h3>
+                        <div class="flex gap-2">
+                            <button id="btnRotateLeft" class="p-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-700 transition" title="向左旋轉">
+                                <i class="ph ph-arrow-counter-clockwise text-lg"></i>
+                            </button>
+                            <button id="btnRotateRight" class="p-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-gray-700 transition" title="向右旋轉">
+                                <i class="ph ph-arrow-clockwise text-lg"></i>
+                            </button>
+                            <button id="btnReset" class="p-2 bg-gray-100 hover:bg-red-50 text-red-600 hover:text-red-700 rounded-lg transition" title="重置裁切">
+                                <i class="ph ph-arrow-u-up-left text-lg"></i>
+                            </button>
+                            <button id="btnNewImage" class="p-2 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg transition text-sm font-medium ml-2 px-3">
+                                重新上傳
+                            </button>
+                        </div>
+                    </div>
+                    <div class="img-container shadow-inner border border-gray-100">
+                        <img id="image" src="" alt="Source Image" class="block max-w-full">
+                    </div>
+                    <div class="mt-3 text-sm text-gray-500 flex justify-between">
+                        <span>原始圖片大小: <span id="originalSize">0 x 0</span> px</span>
+                        <span>目前裁切框: <span id="cropBoxSize" class="font-medium text-blue-600">0 x 0</span> px</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column: Settings & Preview -->
+            <div class="w-full lg:w-1/3 flex flex-col gap-6">
+                
+                <!-- Output Settings -->
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200">
+                    <h3 class="font-semibold text-gray-800 flex items-center gap-2 mb-5">
+                        <i class="ph ph-sliders-horizontal text-lg"></i> 匯出設定
+                    </h3>
+
+                    <!-- Quick Ratios (NEW) -->
+                    <div class="mb-5">
+                        <label class="text-sm font-medium text-gray-700 mb-2 block">快速裁切比例 (含證件照)</label>
+                        <div class="flex flex-wrap gap-2">
+                            <button class="ratio-btn bg-blue-600 text-white px-3 py-1.5 rounded-lg text-sm transition border border-transparent" data-ratio="NaN">自由</button>
+                            <button class="ratio-btn bg-gray-50 text-gray-700 hover:bg-gray-200 border border-gray-200 px-3 py-1.5 rounded-lg text-sm transition" data-ratio="1">1:1</button>
+                            <button class="ratio-btn bg-gray-50 text-gray-700 hover:bg-gray-200 border border-gray-200 px-3 py-1.5 rounded-lg text-sm transition" data-ratio="1.7777777">16:9</button>
+                            <!-- 台灣證件照標準: 1吋=28x35mm(4:5) / 2吋=35x45mm(7:9)，帶入 300DPI 的標準像素 -->
+                            <button class="ratio-btn bg-gray-50 text-gray-700 hover:bg-gray-200 border border-gray-200 px-3 py-1.5 rounded-lg text-sm transition" data-ratio="0.8" data-w="331" data-h="413" title="台灣1吋照片">1吋照</button>
+                            <button class="ratio-btn bg-gray-50 text-gray-700 hover:bg-gray-200 border border-gray-200 px-3 py-1.5 rounded-lg text-sm transition" data-ratio="0.7777777" data-w="413" data-h="531" title="台灣2吋半身照">2吋照</button>
+                        </div>
+                    </div>
+
+                    <!-- Export Format (NEW) -->
+                    <div class="mb-5">
+                        <label class="text-sm font-medium text-gray-700 mb-2 block">匯出格式</label>
+                        <select id="outFormat" class="w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-gray-800 font-medium transition cursor-pointer">
+                            <option value="image/jpeg">JPG (建議照片使用，純白背景)</option>
+                            <option value="image/png">PNG (保留透明背景，無損畫質)</option>
+                            <option value="image/webp">WebP (網頁最佳化，檔案小)</option>
+                        </select>
+                    </div>
+                    
+                    <!-- Resize Options -->
+                    <div class="mb-6">
+                        <div class="flex justify-between items-center mb-2">
+                            <label class="text-sm font-medium text-gray-700">自訂輸出尺寸 (像素)</label>
+                            <button id="btnLockRatio" class="text-blue-600 hover:text-blue-800 transition flex items-center gap-1 text-sm bg-blue-50 px-2 py-1 rounded" title="鎖定比例">
+                                <i id="lockIcon" class="ph-fill ph-link text-base"></i>
+                            </button>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <div class="flex-1 relative">
+                                <input type="number" id="outWidth" class="w-full pl-3 pr-8 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-gray-800 font-medium">
+                                <span class="absolute right-3 top-2.5 text-gray-400 text-sm">W</span>
+                            </div>
+                            <i class="ph ph-x text-gray-400"></i>
+                            <div class="flex-1 relative">
+                                <input type="number" id="outHeight" class="w-full pl-3 pr-8 py-2 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition text-gray-800 font-medium">
+                                <span class="absolute right-3 top-2.5 text-gray-400 text-sm">H</span>
+                            </div>
+                        </div>
+                        <p class="text-xs text-gray-500 mt-2">點擊上方證件照按鈕會自動填入標準列印尺寸 (300dpi)。</p>
+                    </div>
+
+                    <!-- Quality Slider -->
+                    <div id="qualityContainer" class="mb-2 transition-opacity duration-300">
+                        <div class="flex justify-between items-center mb-3">
+                            <label class="text-sm font-medium text-gray-700">壓縮品質 (適用於 JPG/WebP)</label>
+                            <span id="qualityValue" class="text-sm font-bold text-blue-600">90%</span>
+                        </div>
+                        <input type="range" id="qualitySlider" min="10" max="100" value="90" class="range-slider">
+                        <div class="flex justify-between text-xs text-gray-400 mt-1">
+                            <span>低畫質 (檔案小)</span>
+                            <span>高畫質 (檔案大)</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Preview & Download -->
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-gray-200 flex flex-col flex-grow">
+                    <h3 class="font-semibold text-gray-800 flex items-center gap-2 mb-4">
+                        <i class="ph ph-image text-lg"></i> 即時預覽與估算
+                    </h3>
+                    
+                    <div class="flex-grow flex items-center justify-center bg-[#e5e7eb] rounded-lg border border-gray-200 overflow-hidden mb-4 relative" style="min-height: 200px; background-image: radial-gradient(#d1d5db 1px, transparent 1px); background-size: 20px 20px;">
+                        <img id="previewImg" src="" alt="Preview" class="max-w-full max-h-48 object-contain drop-shadow-md hidden">
+                        <div id="previewPlaceholder" class="text-gray-400 flex flex-col items-center">
+                            <i class="ph ph-spinner-gap animate-spin text-3xl mb-2"></i>
+                            <span class="text-sm">生成預覽中...</span>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-between items-center mb-6 bg-gray-50 p-3 rounded-lg border border-gray-100">
+                        <span class="text-sm text-gray-600 font-medium">預估檔案大小:</span>
+                        <span id="fileSize" class="text-lg font-bold text-green-600">0 KB</span>
+                    </div>
+
+                    <button id="btnDownload" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 active:scale-95">
+                        <i class="ph ph-download-simple text-xl"></i>
+                        下載圖片
+                    </button>
+                </div>
+
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // DOM Elements
+        const uploadZone = document.getElementById('uploadZone');
+        const fileInput = document.getElementById('fileInput');
+        const workspace = document.getElementById('workspace');
+        const imageElement = document.getElementById('image');
+        
+        // Control Elements
+        const outWidthInput = document.getElementById('outWidth');
+        const outHeightInput = document.getElementById('outHeight');
+        const btnLockRatio = document.getElementById('btnLockRatio');
+        const lockIcon = document.getElementById('lockIcon');
+        const qualitySlider = document.getElementById('qualitySlider');
+        const qualityValue = document.getElementById('qualityValue');
+        const qualityContainer = document.getElementById('qualityContainer');
+        const outFormatSelect = document.getElementById('outFormat');
+        const ratioBtns = document.querySelectorAll('.ratio-btn');
+        
+        // Display Elements
+        const originalSizeDisplay = document.getElementById('originalSize');
+        const cropBoxSizeDisplay = document.getElementById('cropBoxSize');
+        const previewImg = document.getElementById('previewImg');
+        const previewPlaceholder = document.getElementById('previewPlaceholder');
+        const fileSizeDisplay = document.getElementById('fileSize');
+        
+        // Buttons
+        const btnRotateLeft = document.getElementById('btnRotateLeft');
+        const btnRotateRight = document.getElementById('btnRotateRight');
+        const btnReset = document.getElementById('btnReset');
+        const btnNewImage = document.getElementById('btnNewImage');
+        const btnDownload = document.getElementById('btnDownload');
+
+        // State variables
+        let cropper = null;
+        let isRatioLocked = true;
+        let currentRatio = 1;
+        let updatePreviewTimeout = null;
+        let originalFileName = "image";
+        let isUserTypingDimensions = false; // Prevent circular updates during typing
+
+        // Upload Logic
+        uploadZone.addEventListener('click', (e) => {
+            if(e.target !== fileInput) fileInput.click();
+        });
+
+        uploadZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadZone.classList.add('border-blue-500', 'bg-blue-50');
+        });
+
+        uploadZone.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            uploadZone.classList.remove('border-blue-500', 'bg-blue-50');
+        });
+
+        uploadZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadZone.classList.remove('border-blue-500', 'bg-blue-50');
+            if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                handleFile(e.dataTransfer.files[0]);
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files && e.target.files.length > 0) {
+                handleFile(e.target.files[0]);
+            }
+        });
+
+        function handleFile(file) {
+            if (!file.type.startsWith('image/')) {
+                showToast('請上傳有效的圖片檔案。', 'error');
+                return;
+            }
+
+            // Extract original filename without extension
+            originalFileName = file.name.replace(/\.[^/.]+$/, "");
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                // Initialize Image for Cropper
+                imageElement.src = e.target.result;
+                
+                // Get original image dimensions for display
+                const tempImg = new Image();
+                tempImg.onload = () => {
+                    originalSizeDisplay.innerText = `${tempImg.width} x ${tempImg.height}`;
+                };
+                tempImg.src = e.target.result;
+
+                // UI Transition
+                uploadZone.classList.add('hidden');
+                workspace.classList.remove('hidden');
+                workspace.classList.add('flex');
+
+                initCropper();
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function initCropper() {
+            if (cropper) {
+                cropper.destroy();
+            }
+
+            cropper = new Cropper(imageElement, {
+                viewMode: 1, // Restrict crop box to not exceed canvas size
+                dragMode: 'crop',
+                autoCropArea: 0.8, // Initial crop area size
+                restore: false,
+                guides: true,
+                center: true,
+                highlight: false,
+                cropBoxMovable: true,
+                cropBoxResizable: true,
+                toggleDragModeOnDblclick: false,
+                ready() {
+                    // Initial sync when ready
+                    syncCropDataToInputs();
+                    updatePreview();
+                },
+                crop(event) {
+                    // Continuously update the crop box size display
+                    const width = Math.round(event.detail.width);
+                    const height = Math.round(event.detail.height);
+                    cropBoxSizeDisplay.innerText = `${width} x ${height}`;
+                },
+                cropend() {
+                    // Update settings and preview only when the user finishes dragging
+                    if (!isUserTypingDimensions) {
+                         syncCropDataToInputs();
+                         updatePreview();
+                    }
+                },
+                zoom() {
+                    // Delay update on zoom to prevent lag
+                    debounceUpdatePreview();
+                }
+            });
+        }
+
+        function syncCropDataToInputs() {
+            if (!cropper) return;
+            const data = cropper.getData(true); // true = rounded values
+            
+            // Only update inputs if they are empty or we want to force sync
+            outWidthInput.value = data.width;
+            outHeightInput.value = data.height;
+            currentRatio = data.width / data.height;
+        }
+
+        // Link/Lock Aspect Ratio
+        btnLockRatio.addEventListener('click', () => {
+            isRatioLocked = !isRatioLocked;
+            if (isRatioLocked) {
+                lockIcon.classList.replace('ph-link-break', 'ph-link');
+                btnLockRatio.classList.add('bg-blue-50', 'text-blue-600');
+                btnLockRatio.classList.remove('bg-gray-100', 'text-gray-500');
+                
+                // Recalculate ratio based on current inputs
+                const w = parseFloat(outWidthInput.value) || 1;
+                const h = parseFloat(outHeightInput.value) || 1;
+                currentRatio = w / h;
+            } else {
+                lockIcon.classList.replace('ph-link', 'ph-link-break');
+                btnLockRatio.classList.remove('bg-blue-50', 'text-blue-600');
+                btnLockRatio.classList.add('bg-gray-100', 'text-gray-500');
+            }
+        });
+
+        // Input Dimension Changes
+        outWidthInput.addEventListener('input', (e) => {
+            isUserTypingDimensions = true;
+            const w = parseFloat(e.target.value);
+            if (isRatioLocked && w > 0) {
+                outHeightInput.value = Math.round(w / currentRatio);
+            }
+            debounceUpdatePreview();
+        });
+
+        outWidthInput.addEventListener('change', () => { isUserTypingDimensions = false; });
+
+        outHeightInput.addEventListener('input', (e) => {
+            isUserTypingDimensions = true;
+            const h = parseFloat(e.target.value);
+            if (isRatioLocked && h > 0) {
+                outWidthInput.value = Math.round(h * currentRatio);
+            }
+            debounceUpdatePreview();
+        });
+        
+        outHeightInput.addEventListener('change', () => { isUserTypingDimensions = false; });
+
+        // Format Selection
+        outFormatSelect.addEventListener('change', (e) => {
+            if (e.target.value === 'image/png') {
+                qualityContainer.classList.add('opacity-40', 'pointer-events-none');
+            } else {
+                qualityContainer.classList.remove('opacity-40', 'pointer-events-none');
+            }
+            debounceUpdatePreview();
+        });
+
+        // Quick Ratio Buttons
+        ratioBtns.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                // Update styling
+                ratioBtns.forEach(b => {
+                    b.classList.remove('bg-blue-600', 'text-white', 'border-transparent');
+                    b.classList.add('bg-gray-50', 'text-gray-700', 'border-gray-200');
+                });
+                e.target.classList.remove('bg-gray-50', 'text-gray-700', 'border-gray-200');
+                e.target.classList.add('bg-blue-600', 'text-white', 'border-transparent');
+
+                const ratio = parseFloat(e.target.dataset.ratio);
+                const targetW = e.target.dataset.w;
+                const targetH = e.target.dataset.h;
+
+                if (cropper) {
+                    cropper.setAspectRatio(ratio);
+                    
+                    // If it's a specific ID photo format, auto-fill output dimensions for best print quality
+                    if (targetW && targetH) {
+                        outWidthInput.value = targetW;
+                        outHeightInput.value = targetH;
+                        currentRatio = targetW / targetH;
+                        
+                        // Briefly lock ratio when auto-filling ID photo sizes for safety
+                        if (!isRatioLocked) btnLockRatio.click(); 
+                    }
+                }
+            });
+        });
+
+        // Quality Slider
+        qualitySlider.addEventListener('input', (e) => {
+            qualityValue.innerText = `${e.target.value}%`;
+            debounceUpdatePreview();
+        });
+
+        // Rotate & Reset Buttons
+        btnRotateLeft.addEventListener('click', () => {
+            if(cropper) { cropper.rotate(-90); debounceUpdatePreview(); }
+        });
+        
+        btnRotateRight.addEventListener('click', () => {
+            if(cropper) { cropper.rotate(90); debounceUpdatePreview(); }
+        });
+
+        btnReset.addEventListener('click', () => {
+            if(cropper) {
+                cropper.reset();
+                syncCropDataToInputs();
+                updatePreview();
+            }
+        });
+
+        btnNewImage.addEventListener('click', () => {
+            workspace.classList.add('hidden');
+            workspace.classList.remove('flex');
+            uploadZone.classList.remove('hidden');
+            fileInput.value = ''; // clear selection
+            if(cropper) cropper.destroy();
+            previewImg.classList.add('hidden');
+            previewPlaceholder.classList.remove('hidden');
+            fileSizeDisplay.innerText = "0 KB";
+        });
+
+
+        function debounceUpdatePreview() {
+            clearTimeout(updatePreviewTimeout);
+            previewImg.classList.add('hidden');
+            previewPlaceholder.classList.remove('hidden');
+            updatePreviewTimeout = setTimeout(() => {
+                updatePreview();
+            }, 400); // 400ms debounce
+        }
+
+        function updatePreview() {
+            if (!cropper) return;
+
+            const targetWidth = parseInt(outWidthInput.value);
+            const targetHeight = parseInt(outHeightInput.value);
+            const quality = parseInt(qualitySlider.value) / 100;
+
+            if (isNaN(targetWidth) || isNaN(targetHeight) || targetWidth <= 0 || targetHeight <= 0) {
+                return; // Invalid dimensions
+            }
+
+            try {
+                // Get selected format and background color setting
+                const format = outFormatSelect.value;
+                const fillColor = (format === 'image/jpeg') ? '#ffffff' : 'transparent';
+
+                // Get Cropped Canvas with specific output dimensions
+                const croppedCanvas = cropper.getCroppedCanvas({
+                    width: targetWidth,
+                    height: targetHeight,
+                    imageSmoothingEnabled: true,
+                    imageSmoothingQuality: 'high',
+                    fillColor: fillColor 
+                });
+
+                if (!croppedCanvas) return;
+
+                // Export to DataURL based on format
+                const dataUrl = croppedCanvas.toDataURL(format, quality);
+                
+                // Display Preview
+                previewImg.src = dataUrl;
+                previewPlaceholder.classList.add('hidden');
+                previewImg.classList.remove('hidden');
+
+                // Calculate estimated file size
+                // Remove data prefix
+                const base64str = dataUrl.split(',')[1];
+                // Base64 size formula: (string_length * (3/4)) - padding bytes
+                let padding = 0;
+                if (base64str.endsWith('==')) padding = 2;
+                else if (base64str.endsWith('=')) padding = 1;
+                
+                const sizeInBytes = (base64str.length * 0.75) - padding;
+                const sizeInKB = sizeInBytes / 1024;
+                
+                if (sizeInKB > 1024) {
+                    fileSizeDisplay.innerText = `${(sizeInKB / 1024).toFixed(2)} MB`;
+                    fileSizeDisplay.className = "text-lg font-bold text-orange-600"; // Warn if large
+                } else {
+                    fileSizeDisplay.innerText = `${sizeInKB.toFixed(1)} KB`;
+                    fileSizeDisplay.className = "text-lg font-bold text-green-600";
+                }
+
+            } catch (error) {
+                console.error("Preview generation failed:", error);
+            }
+        }
+
+        btnDownload.addEventListener('click', () => {
+            if (!previewImg.src || previewImg.src.startsWith(window.location.href)) {
+                showToast('請先上傳並裁切圖片', 'error');
+                return;
+            }
+
+            // Create a temporary link element
+            const link = document.createElement('a');
+            const targetWidth = outWidthInput.value;
+            const targetHeight = outHeightInput.value;
+            
+            const format = outFormatSelect.value;
+            const ext = format === 'image/jpeg' ? 'jpg' : (format === 'image/png' ? 'png' : 'webp');
+            
+            // Format filename: originalName_widthxheight.ext
+            link.download = `${originalFileName}_${targetWidth}x${targetHeight}.${ext}`;
+            link.href = previewImg.src;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            showToast('圖片已成功下載！', 'success');
+        });
+
+        // Simple Custom Toast Notification System
+        function showToast(message, type = 'success') {
+            const toast = document.createElement('div');
+            const bgClass = type === 'success' ? 'bg-green-600' : 'bg-red-600';
+            const icon = type === 'success' ? '<i class="ph ph-check-circle text-xl"></i>' : '<i class="ph ph-warning-circle text-xl"></i>';
+            
+            toast.className = `fixed bottom-6 right-6 flex items-center gap-2 ${bgClass} text-white px-5 py-3 rounded-xl shadow-xl transform transition-all duration-300 translate-y-10 opacity-0 z-50`;
+            toast.innerHTML = `${icon} <span class="font-medium">${message}</span>`;
+            
+            document.body.appendChild(toast);
+            
+            // Animate in
+            setTimeout(() => {
+                toast.classList.remove('translate-y-10', 'opacity-0');
+            }, 10);
+            
+            // Animate out and remove
+            setTimeout(() => {
+                toast.classList.add('translate-y-10', 'opacity-0');
+                setTimeout(() => {
+                    document.body.removeChild(toast);
+                }, 300);
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
